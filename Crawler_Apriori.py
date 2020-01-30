@@ -4,97 +4,110 @@ import datetime
 import pandas as pd
 from Crawler_Naver_T02 import naver_keywords
 
-# # KIN
-# file_name = 'parsed_dict_20190304.txt'
-# with open(file_name, mode='rt', encoding='utf-16') as file:
-#     print('readable: ', file.readable())
-#     data_dict = eval(file.read())
-# # preprocessing
-# data_dict_1 = dict()
-# for company in data_dict.keys():
-#     txt = data_dict[company]
-#     txt = re.sub(r'\xa0','', txt)
-#     txt = re.sub(r'\xad', '', txt)
-#     txt = re.sub('[.|!|?]', '스플릿지점',txt)
-#     txt = re.sub('[~!@#$%^&*()_+?><":}{.,;]*', '', txt)
-#     data_dict_1[company] = re.split("스플릿지점", txt)
-#
-# t_now = datetime.datetime.now()
-# with open('2khaiii_MBA_' + str(t_now.date()).replace('-', '') + '.txt', mode='wt', encoding='utf-16') as file:
-#     file.write(str(data_dict_1))
-
-
-# morpheme by Khaiii
-file_name1 = 'parse_sen_dict.txt'
-with open(file_name1, mode= 'rt', encoding= 'utf-16') as file:
-    print('readable: ', file.readable())
-    data_dict1 = eval(file.read())
-
-# preprocessing
-# preprocessing
-filter_words = set()
-add_lst = '답변 신청 카페 추가 나오'.split()
-for word in add_lst:
-    filter_words.add(word)
+from apyori import apriori
+from functools import reduce
+from itertools import combinations, product, permutations
+import seaborn as sn
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+ 
+ 
+# file upload & pre-processing
+file_dir = 'D:\\python3_JHC\\SKB_Rep_Crawling\\'
+file_name = '0313kinnparsed_dict.txt'
+with open(file_dir + file_name, mode= 'rt', encoding = 'utf-16') as file:
+    data_dict = eval(file.read())
+ 
 data_dict_proc = dict()
-for company in data_dict1.keys():
-    data_dict_proc[company] = list()
-    for lst in data_dict1[company]:
-        if len(lst) == 0:
-            continue
-        else:
-            temp_lst = [morph_pair[0] for morph_pair in lst if morph_pair[0] not in filter_words]
-            if len(temp_lst) > 0:
-                data_dict_proc[company].append(temp_lst)
-
-selected_words = set('MBPS 셋탑 빠르 기본료 스마트 채널 UHD 기가인터넷 초고속인터넷 무료 회선 업체 일반'.split())
-
-data_dict_slct = dict()
-for company in data_dict1.keys():
-    data_dict_slct[company] = list()
-    company_name = set([company])
-    for basket in data_dict_proc[company]:
-        check = False
-        for item in basket:
-            if item in company_name:
-                check = True
-                break
-        if check is True:
-            data_dict_slct[company].append(basket)
-    print(len(data_dict_slct[company]))
-
-data_dict_slct2 = dict()
-for company in data_dict1.keys():
-    data_dict_slct2[company] = list()
-    for basket in data_dict_slct[company]:
-        check = False
-        for item in basket:
-            if item in selected_words:
-                check = True
-                break
-        if check is True:
-            data_dict_slct2[company].append(basket)
-    print(len(data_dict_slct2[company]))
-
-
-if __name__ == '__main__':
-    for company in data_dict_slct2.keys():
-        oht = OnehotTransactions()
-        oht_ary = oht.fit(data_dict_slct2[company]).transform(data_dict_slct2[company])
-        df = pd.DataFrame(oht_ary, columns= oht.columns_)
-        print(df.iloc[0,0])
-
-    frequent_itemsets = apriori(df, min_support= 0.01, use_colnames= True)
-
-
-
-frozenset({'인터넷', 'TV', '상품'})
-frozenset({'사은품', '인터넷', '가입', '문의'})
-frozenset({'인터넷', '요금', '휴대폰'})
-frozenset({'약정', '고객'})
-frozenset({'인터넷', '가입', '회선'})
-frozenset({'인터넷', '통신사'})
-frozenset({'인터넷', '결합', '약정'})
-frozenset({'할인'})
-frozenset({'결합', '통신사', '인터넷'})
-frozenset({'결합', '할인', '약정', '가입'})
+for key in data_dict.keys():
+    data_dict_proc[key] = list()
+    for doc in data_dict[key]:
+        for sen in doc:
+            if len(sen) > 0:
+                data_dict_proc[key].append(set([word[0] for word in sen]))
+ 
+ 
+ 
+# apriori by keywords
+## freq count
+# All docs together
+total_docs = list(reduce(lambda x, y: x + y, list(data_dict_proc.values())))
+print("total N: ", len(total_docs))
+ 
+keywords = '속도 빠르 느리 안정 좋 나쁘 핑 낮 높'.split()
+companies = list(data_dict.keys())
+temp_key_lst = keywords + companies
+# frequency count
+freq_dict = dict()
+for key in temp_key_lst:
+    freq_dict[key] = 0
+    for sentence in total_docs:
+        if key in sentence:
+            freq_dict[key] += 1
+print(freq_dict)
+ 
+result_dict = dict()
+for onepair in freq_dict.keys():
+    result_dict[onepair] = [freq_dict[onepair], freq_dict[onepair]/len(total_docs),1,1]
+ 
+#self-join
+twopairs = list()
+threepairs = list()
+for i in range(0,3):
+    twopairs_temp = list(product(companies, [keywords[i*3]]))
+    twopairs += twopairs_temp
+    for pair in twopairs_temp:
+        for j in [i*3+1,i*3+2]:
+            threepair_temp = list(pair)
+            threepair_temp.append(keywords[j])
+            threepairs.append(tuple(threepair_temp))
+ 
+combinations = twopairs + threepairs
+comb_cnt_dict = dict()
+for comb in combinations:
+    comb_cnt_dict[comb] = 0
+    for sentence in total_docs:
+        if sum([1 for word in comb if word in sentence]) == len(comb):
+            comb_cnt_dict[comb] += 1
+ 
+ 
+for pair in twopairs:
+    result_dict[pair] = [comb_cnt_dict[pair], comb_cnt_dict[pair]/len(total_docs),
+                            comb_cnt_dict[pair]/result_dict[pair[0]][0],
+                            (comb_cnt_dict[pair]/result_dict[pair[0]][0])/(result_dict[pair[1]][1])]
+ 
+ 
+ 
+for pair in threepairs:
+    try:
+        result_dict[pair] = [comb_cnt_dict[pair], comb_cnt_dict[pair]/len(total_docs),
+                                comb_cnt_dict[pair]/result_dict[pair[:2]][0],
+                                (comb_cnt_dict[pair]/result_dict[pair[:2]][0])/(result_dict[pair[2]][1])]
+    except:
+        result_dict[pair] = [0, 0, 0, 0]
+ 
+col_lst = [str(key) for key in list(result_dict.keys())]
+df = pd.DataFrame(index= col_lst,
+                 columns= 'frequency support confidence lift'.split())
+ 
+ 
+for key in result_dict.keys():
+    print(key)
+    df.loc[str(key)] = result_dict[key]
+ 
+ 
+# visualizing 예시
+# data selection
+data= df.iloc[9:11+1]
+# graph
+sn.set(style= "whitegrid", font= 'SeoulHangangC')
+ax = sn.barplot(x=list(data.index), y= 'frequency', data= data, palette=['#FF0000','#2d72d9', '#598C14'])
+ax.set_title("\"브랜드\" 빈도수", fontsize = 15, x=0.5, y=1.1)
+n=0
+for p in ax.patches:
+    x = p.get_x()
+    y = p.get_height()
+    txt = "{}%".format('%.2f'%round(df.loc[data.index[n]]['support']*100,3))
+    plt.text(x+0.25, y+100, s= txt, va = 'center', ha = 'left')
+    n+=1
